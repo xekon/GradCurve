@@ -1,75 +1,42 @@
-// VapourSynth port by HolyWu
+// VapourSynth port by Xekon
 //
-// Copyright (c) 2002 Tom Barry.  All rights reserved.
-//      trbarry@trbarry.com
-//  modified by Foxyshadis
-//      foxyshadis@hotmail.com
-//  modified by Firesledge
-//      http://ldesoras.free.fr
-//  modified by LaTo INV.
-//      http://forum.doom9.org/member.php?u=131032
-// Requires Avisynth source code to compile for Avisynth
-// Avisynth Copyright 2000 Ben Rudiak-Gould.
-//      http://www.math.berkeley.edu/~benrg/avisynth.html
+// Copyright (c) 2008 Alexander Nagiller
+//      http://members.chello.at/nagiller/vdub/readme.html
+//      http://forum.doom9.org/showthread.php?t=133191
+//  Speed optimizations for HSV and CMYK by Achim Stahlberger.
+//  modified by Xekon
+//      http://forum.doom9.org/showthread.php?t=174096
 /////////////////////////////////////////////////////////////////////////////
 //
-//  This file is subject to the terms of the GNU General Public License as
-//  published by the Free Software Foundation.  A copy of this license is
-//  included with this software distribution in the file COPYING.  If you
-//  do not have a copy, you may obtain a copy by writing to the Free
-//  Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+//    This program is free software; you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation.
 //
-//  This software is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU General Public License for more details
-//  
-//  Also, this program is "Philanthropy-Ware".  That is, if you like it and 
-//  feel the need to reward or inspire the author then please feel free (but
-//  not obligated) to consider joining or donating to the Electronic Frontier
-//  Foundation. This will help keep cyber space free of barbed wire and bullsh*t.  
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program; if not, write to the Free Software
+//    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 //
 /////////////////////////////////////////////////////////////////////////////
 // Change Log
 //
-// Date          Version  Developer      Changes
+// Date         Version  Developer           Changes
 //
-// 07 May 2003   1.0.0.0  Tom Barry      New Release
-// 01 Jun 2006   1.1.0.0  Foxyshadis     Chroma noise, constant seed
-// 06 Jun 2006   1.2.0.0  Foxyshadis     Supports YUY2, RGB. Fix cache mess.
-// 10 Jun 2006   1.3.0.0  Foxyshadis     Crashfix, noisegen optimization
-// 11 Nov 2006   1.4.0.0  Foxyshadis     Constant replaces seed, seed repeatable
-// 07 May 2010   1.5.0.0  Foxyshadis     Limit the initial seed generation to fix memory issues.
-// 13 May 2010   1.5.1.0  Firesledge     The source code compiles on Visual C++ versions older than 2008
-// 26 Oct 2011   1.5.2.0  Firesledge     Removed the SSE2 requirement.
-// 26 Oct 2011   1.5.3.0  Firesledge     Fixed coloring and bluring in RGB24 mode.
-// 27 Oct 2011   1.5.4.0  Firesledge     Fixed bad pixels on the last line in YV12 mode when constant=true,
-//                                       fixed potential problems with frame width > 4096 pixels
-//                                       and fixed several other minor things.
-// 28 Oct 2011   1.6.0.0  LaTo INV.      Added SSE2 code (50% faster than MMX).
-// 29 Oct 2011   1.6.1.0  LaTo INV.      Automatic switch to MMX if SSE2 is not supported by the CPU.
-// 16 Aug 2012   1.7.0.0  Firesledge     Supports Y8, YV16, YV24 and YV411 colorspaces.
+// 21 Mar 2008  1.4.5.0  Alexander Nagiller  Final Release for VirtualDub.
+//										       http://members.chello.at/nagiller/vdub/history.html
+// 24 Dec 2016  1.5.0.0  Xekon               First release, Port for VapourSynth
 //
 /////////////////////////////////////////////////////////////////////////////
 
-//#include <windows.h>
-//#include <commctrl.h>
-//#include <stdio.h>
-//#include <math.h>
-
+#include <stdio.h>
 #include <algorithm>
-#include <cassert>
 #include <cmath>
-#include <ctime>
-#include <vector>
-#include <vapoursynth/VapourSynth.h>
-#include <vapoursynth/VSHelper.h>
-
-// max # of noise planes
-#define MAXP 2
-
-// offset in pixels of the fake plane MAXP relative to plane MAXP-1
-#define OFFSET_FAKEPLANE 32
+#include <VapourSynth.h>
+#include <VSHelper.h>
 
 long *rgblab; //LUT Lab
 long *labrgb; //LUT Lab
@@ -77,40 +44,19 @@ long *labrgb; //LUT Lab
 struct GradCurveData {
 	VSNodeRef * node;
 	const VSVideoInfo * vi;
-	bool constant;
-	int64_t idum;
-	int nStride[MAXP], nHeight[MAXP], nSize[MAXP];
-	int storedFrames;
-	std::vector<uint8_t> pNoiseSeeds;
-	std::vector<int16_t> pN[MAXP];
-	std::vector<float> pNF[MAXP];
-	bool process[3];
-	float lower[3], upper[3];
-	//mine
-	//IFilterPreview		*ifp; //vdub
+	// xekon add vdub
 	long rvalue[3][256];
 	int gvalue[3][256];
 	int bvalue[256];
 	int ovalue[5][256];
-	int value;
-	int space_mode;
 	int channel_mode;
 	int proces;
-	int xl;
-	int yl;
-	int offset;
 	char filename[1024];
 	int filter;
 	bool Labprecalc;
-	int laboff;
 	int drwmode[5];
 	int drwpoint[5][16][2];
 	int poic[5];
-	int cp;
-	bool psel;
-	int noise, scale, block;
-	int iterTimesTwiceScaling;
-	float * srcInterleaved, *dstInterleaved, *buffer;
 	float oldr, oldb, oldg, medr, medb, medg;
 	char gamma[10];//windows.h
 };
@@ -402,9 +348,8 @@ void ImportCurve(GradCurveData * d) // import curves
 					d->drwpoint[i][1][0] = 255;
 					d->drwpoint[i][1][1] = 255;
 				}
-				noocur = 5;
+				noocur = 5;  // xekon, value is never used?
 			}
-			d->cp = 0;
 			cmtmp = d->channel_mode;
 			for (i = 0; i<5; i++) {	// calculate curve values
 				d->drwmode[i] = 2;
@@ -522,12 +467,11 @@ void ImportCurve(GradCurveData * d) // import curves
 			for (i = 0; i<256; i++) { d->ovalue[0][i] = temp[i]; }
 		}
 		cmtmp = d->channel_mode;
-		for (i = 0; i<5; i++) {	// calculate curve values		
+		for (i = 0; i<5; i++) {	// calculate curve values
 			d->channel_mode = i;
 			if (d->drwmode[i] != 0) { CalcCurve(d); }
 		}
 		d->channel_mode = cmtmp;
-		d->cp = 0;
 		nrf = true;
 	}
 	else if (d->filter == 6)	// *.amp Smartvurve hsv
@@ -538,7 +482,7 @@ void ImportCurve(GradCurveData * d) // import curves
 		else
 		{
 			fseek(pFile, 0, SEEK_END);
-			lSize = ftell(pFile);
+			lSize = ftell(pFile);  // xekon, value is never used?
 			rewind(pFile);
 			for (i = 0; (i < 768) && (feof(pFile) == 0); i++)
 			{
@@ -665,11 +609,7 @@ static const VSFrameRef *VS_CC GradCurveGetFrame(int n, int activationReason, vo
 
 		for (int y = 0; y < height; y++) {
 			for (int x = 0; x < width; x++) {
-				const int pos = width * y + x;
-				d->srcInterleaved[pos * 3] = srcpR[x];
-				d->srcInterleaved[pos * 3 + 1] = srcpG[x];
-				d->srcInterleaved[pos * 3 + 2] = srcpB[x];
-
+				//const int pos = width * y + x;
 				d->oldr = srcpR[x];
 				d->oldb = srcpB[x];
 				d->oldg = srcpG[x];
@@ -693,10 +633,10 @@ static const VSFrameRef *VS_CC GradCurveGetFrame(int n, int activationReason, vo
 			dstpB += dstStride;
 		}
 		//end xekon vdub
-		
+
 		vsapi->freeFrame(src);
-		
-		return dst;		
+
+		return dst;
 
 		//for (int plane = 0; plane < d->vi->format->numPlanes; plane++) {
 		//	if (d->process[plane]) {
@@ -719,8 +659,8 @@ static const VSFrameRef *VS_CC GradCurveGetFrame(int n, int activationReason, vo
 		//	}
 		//}
 
-		vsapi->freeFrame(src);
-		return dst;
+		//vsapi->freeFrame(src);
+		//return dst;
 	}
 
 	return nullptr;
@@ -730,29 +670,31 @@ static void VS_CC GradCurveFree(void *instanceData, VSCore *core, const VSAPI *v
 	GradCurveData * d = static_cast<GradCurveData *>(instanceData);
 	vsapi->freeNode(d->node);
 	delete d;
+	delete rgblab; //LUT Lab
+	delete labrgb; //LUT Lab
 }
 
 static void VS_CC GradCurveCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
 	GradCurveData d;
-	
+
 	//temp unused chunk, function parameter setting and error testing
 	int err;
-	strcat(d.filename, (vsapi->propGetData(in, "var", 0, &err)));//hard coded, file path for test
-	//float var = static_cast<float>(vsapi->propGetFloat(in, "var", 0, &err));
-	//if (err)
-	//	var = 1.f;
-	//float uvar = static_cast<float>(vsapi->propGetFloat(in, "uvar", 0, &err));
-	//const float hcorr = static_cast<float>(vsapi->propGetFloat(in, "hcorr", 0, &err));
-	//const float vcorr = static_cast<float>(vsapi->propGetFloat(in, "vcorr", 0, &err));
-	//int64_t seed = vsapi->propGetInt(in, "seed", 0, &err);
-	//if (err)
-	//	seed = -1;
-	//d.constant = !!vsapi->propGetInt(in, "constant", 0, &err);
-	//if (hcorr < 0.f || hcorr > 1.f || vcorr < 0.f || vcorr > 1.f) {
-	//	vsapi->setError(out, "GradCurve: hcorr and vcorr must be between 0.0 and 1.0 (inclusive)");
-	//	return;
-	//}
-	//end unused chunk
+	strcat(d.filename, (vsapi->propGetData(in, "var", 0, &err)));//xekon, file path for test
+																 //float var = static_cast<float>(vsapi->propGetFloat(in, "var", 0, &err));
+																 //if (err)
+																 //	var = 1.f;
+																 //float uvar = static_cast<float>(vsapi->propGetFloat(in, "uvar", 0, &err));
+																 //const float hcorr = static_cast<float>(vsapi->propGetFloat(in, "hcorr", 0, &err));
+																 //const float vcorr = static_cast<float>(vsapi->propGetFloat(in, "vcorr", 0, &err));
+																 //int64_t seed = vsapi->propGetInt(in, "seed", 0, &err);
+																 //if (err)
+																 //	seed = -1;
+																 //d.constant = !!vsapi->propGetInt(in, "constant", 0, &err);
+																 //if (hcorr < 0.f || hcorr > 1.f || vcorr < 0.f || vcorr > 1.f) {
+																 //	vsapi->setError(out, "GradCurve: hcorr and vcorr must be between 0.0 and 1.0 (inclusive)");
+																 //	return;
+																 //}
+																 //end unused chunk
 
 	d.node = vsapi->propGetNode(in, "clip", 0, nullptr);
 	d.vi = vsapi->getVideoInfo(d.node);
@@ -774,13 +716,7 @@ static void VS_CC GradCurveCreate(const VSMap *in, VSMap *out, void *userData, V
 		d.drwpoint[i][1][0] = 255;
 		d.drwpoint[i][1][1] = 255;
 	}
-	d.value = 0;
 	d.proces = 0;
-	d.xl = 300;
-	d.yl = 300;
-	d.offset = 0;
-	d.psel = false;
-	d.cp = 0;
 	snprintf(d.gamma, 10, "%.3lf", 1.000);
 	for (int i = 0; i<256; i++) {
 		d.ovalue[0][i] = i;
@@ -801,10 +737,10 @@ static void VS_CC GradCurveCreate(const VSMap *in, VSMap *out, void *userData, V
 	d.filter = 2; //hard coded testing, curve file type ACV
 				  //d.filename = "D:/enc/032t.acv"; //hard coded testing, curve file
 	d.channel_mode = 0;//hard coded, copied from callback() rgb modes
-	d.offset = 0;//hard coded, copied from callback() rgb modes
-	d.laboff = 0;//hard coded, copied from callback() rgb modes
-	//strcat(d.filename, "/media/sf_enc/032t.acv");//hard coded, file path for test
-	//vdub end
+					   //d.offset = 0;//hard coded, copied from callback() rgb modes
+					   //d.laboff = 0;//hard coded, copied from callback() rgb modes
+					   //strcat(d.filename, "/media/sf_enc/032t.acv");//hard coded, file path for test
+					   //vdub end
 
 	GradCurveData * data = new GradCurveData(d);
 
@@ -818,11 +754,6 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit(VSConfigPlugin configFunc, VSRegiste
 	configFunc("com.holywu.gradcurve", "grad", "Adjustment of contrast, brightness, gamma and a wide range of color manipulations through gradation curves is possible.", VAPOURSYNTH_API_VERSION, 1, plugin);
 	registerFunc("Curve",
 		"clip:clip;"
-		"var:data:opt;"
-		"uvar:float:opt;"
-		"hcorr:float:opt;"
-		"vcorr:float:opt;"
-		"seed:int:opt;"
-		"constant:int:opt;",
+		"var:data:opt;",
 		GradCurveCreate, nullptr, plugin);
 }
