@@ -37,6 +37,7 @@
 #include <cmath>
 #include <VapourSynth.h>
 #include <VSHelper.h>
+#include <string>
 
 long *rgblab; //LUT Lab
 long *labrgb; //LUT Lab
@@ -51,14 +52,13 @@ struct GradCurveData {
 	int ovalue[5][256];
 	int channel_mode;
 	int proces;
-	char filename[1024];
+	std::string filename;
 	int filter;
 	bool Labprecalc;
 	int drwmode[5];
 	int drwpoint[5][16][2];
 	int poic[5];
-	float oldr, oldb, oldg, medr, medb, medg;
-	char gamma[10];//windows.h
+	char gamma[10];
 };
 
 void PreCalcLut()
@@ -293,7 +293,7 @@ void ImportCurve(GradCurveData * d) // import curves
 
 	if (d->filter == 2)	// *.acv
 	{
-		pFile = fopen(d->filename, "rb");
+		pFile = fopen(d->filename.c_str(), "rb");
 		if (pFile == NULL) {
 			//vsapi->setError(out, "GradCurve: Error opening file"); 
 		}
@@ -361,7 +361,7 @@ void ImportCurve(GradCurveData * d) // import curves
 		}
 	}
 	if (d->filter == 3) { // *.csv
-		pFile = fopen(d->filename, "r");
+		pFile = fopen(d->filename.c_str(), "r");
 		if (pFile == NULL) { //vsapi->setError(out, "GradCurve: Error opening file");
 		}
 		else
@@ -385,7 +385,7 @@ void ImportCurve(GradCurveData * d) // import curves
 		curpos = -1;
 		curposnext = 65530;
 		cordpos = beg + 6;
-		pFile = fopen(d->filename, "rb");
+		pFile = fopen(d->filename.c_str(), "rb");
 		if (pFile == NULL) { //vsapi->setError(out, "GradCurve: Error opening file");
 		}
 		else
@@ -476,7 +476,7 @@ void ImportCurve(GradCurveData * d) // import curves
 	}
 	else if (d->filter == 6)	// *.amp Smartvurve hsv
 	{
-		pFile = fopen(d->filename, "rb");
+		pFile = fopen(d->filename.c_str(), "rb");
 		if (pFile == NULL) { //vsapi->setError(out, "GradCurve: Error opening file");
 		}
 		else
@@ -505,7 +505,7 @@ void ImportCurve(GradCurveData * d) // import curves
 	}
 	else
 	{
-		pFile = fopen(d->filename, "rb"); // *.amp
+		pFile = fopen(d->filename.c_str(), "rb"); // *.amp
 		if (pFile == NULL) { //vsapi->setError(out, "GradCurve: Error opening file");
 		}
 		else
@@ -588,13 +588,6 @@ static const VSFrameRef *VS_CC GradCurveGetFrame(int n, int activationReason, vo
 		const VSFrameRef * src = vsapi->getFrameFilter(n, d->node, frameCtx);
 		VSFrameRef * dst = vsapi->copyFrame(src, core);
 
-		//vdub startproc()
-		ImportCurve(d);
-		if (d->Labprecalc == 0 && d->proces == 8) {	// build up the LUT for the Lab process	if it is not precalculated already
-			PreCalcLut();
-			d->Labprecalc = 1;
-		}
-
 		//borrowed and modified from Waifu2x-w2xc
 		const int width = vsapi->getFrameWidth(src, 0);
 		const int height = vsapi->getFrameHeight(src, 0);
@@ -609,21 +602,20 @@ static const VSFrameRef *VS_CC GradCurveGetFrame(int n, int activationReason, vo
 
 		for (int y = 0; y < height; y++) {
 			for (int x = 0; x < width; x++) {
-				//const int pos = width * y + x;
-				d->oldr = srcpR[x];
-				d->oldb = srcpB[x];
-				d->oldg = srcpG[x];
+				float oldr, oldb, oldg, medr, medb, medg;
+				oldr = srcpR[x];
+				oldb = srcpB[x];
+				oldg = srcpG[x];
 
-				d->medr = d->rvalue[1][int(d->oldr)];
-				d->medb = d->ovalue[1][int(d->oldb)];
-				d->medg = d->gvalue[1][int(d->oldg)];
+				medr = d->rvalue[1][int(oldr)];
+				medb = d->ovalue[1][int(oldb)];
+				medg = d->gvalue[1][int(oldg)];
 
-				dstpR[x] = d->rvalue[0][int(d->medr)];
-				dstpB[x] = d->ovalue[0][int(d->medb)];
-				dstpG[x] = d->gvalue[0][int(d->medg)];
+				dstpR[x] = d->rvalue[0][int(medr)];
+				dstpB[x] = d->ovalue[0][int(medb)];
+				dstpG[x] = d->gvalue[0][int(medg)];
 			}
-
-
+			
 			srcpR += srcStride;
 			srcpG += srcStride;
 			srcpB += srcStride;
@@ -632,35 +624,11 @@ static const VSFrameRef *VS_CC GradCurveGetFrame(int n, int activationReason, vo
 			dstpG += dstStride;
 			dstpB += dstStride;
 		}
-		//end xekon vdub
 
 		vsapi->freeFrame(src);
 
 		return dst;
 
-		//for (int plane = 0; plane < d->vi->format->numPlanes; plane++) {
-		//	if (d->process[plane]) {
-		//		const int width = vsapi->getFrameWidth(dst, plane);
-		//		const int height = vsapi->getFrameHeight(dst, plane);
-		//		const int stride = vsapi->getStride(dst, plane);
-		//		uint8_t * dstp = vsapi->getWritePtr(dst, plane);
-		//		int noisePlane = (d->vi->format->colorFamily == cmRGB) ? 0 : plane;
-		//		int noiseOffs = 0;
-		//		setRand(&noisePlane, &noiseOffs, n, d); // seeds randomness w/ plane & frame
-		//		if (d->vi->format->sampleType == stInteger) {
-		//			if (d->vi->format->bitsPerSample == 8)
-		//				updateFrame<uint8_t, int8_t>(dstp, width, height, stride, noisePlane, noiseOffs, plane, d);
-		//			else
-		//				updateFrame<uint16_t, int16_t>(reinterpret_cast<uint16_t *>(dstp), width, height, stride / 2, noisePlane, noiseOffs, plane, d);
-		//		}
-		//		else {
-		//			updateFrame<float, float>(reinterpret_cast<float *>(dstp), width, height, stride / 4, noisePlane, noiseOffs, plane, d);
-		//		}
-		//	}
-		//}
-
-		//vsapi->freeFrame(src);
-		//return dst;
 	}
 
 	return nullptr;
@@ -670,38 +638,21 @@ static void VS_CC GradCurveFree(void *instanceData, VSCore *core, const VSAPI *v
 	GradCurveData * d = static_cast<GradCurveData *>(instanceData);
 	vsapi->freeNode(d->node);
 	delete d;
-	delete rgblab; //LUT Lab
-	delete labrgb; //LUT Lab
+	delete[] rgblab; //LUT Lab
+	delete[] labrgb; //LUT Lab
 }
 
 static void VS_CC GradCurveCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
 	GradCurveData d;
 
-	//temp unused chunk, function parameter setting and error testing
 	int err;
-	strcat(d.filename, (vsapi->propGetData(in, "var", 0, &err)));//xekon, file path for test
-																 //float var = static_cast<float>(vsapi->propGetFloat(in, "var", 0, &err));
-																 //if (err)
-																 //	var = 1.f;
-																 //float uvar = static_cast<float>(vsapi->propGetFloat(in, "uvar", 0, &err));
-																 //const float hcorr = static_cast<float>(vsapi->propGetFloat(in, "hcorr", 0, &err));
-																 //const float vcorr = static_cast<float>(vsapi->propGetFloat(in, "vcorr", 0, &err));
-																 //int64_t seed = vsapi->propGetInt(in, "seed", 0, &err);
-																 //if (err)
-																 //	seed = -1;
-																 //d.constant = !!vsapi->propGetInt(in, "constant", 0, &err);
-																 //if (hcorr < 0.f || hcorr > 1.f || vcorr < 0.f || vcorr > 1.f) {
-																 //	vsapi->setError(out, "GradCurve: hcorr and vcorr must be between 0.0 and 1.0 (inclusive)");
-																 //	return;
-																 //}
-																 //end unused chunk
+	d.filename = static_cast<std::string>(vsapi->propGetData(in, "var", 0, &err));//xekon, curve file path for test
 
 	d.node = vsapi->propGetNode(in, "clip", 0, nullptr);
 	d.vi = vsapi->getVideoInfo(d.node);
 
-	if (!isConstantFormat(d.vi) || (d.vi->format->sampleType == stInteger && d.vi->format->bitsPerSample > 16) ||
-		(d.vi->format->sampleType == stFloat && d.vi->format->bitsPerSample != 32)) {
-		vsapi->setError(out, "GradCurve: only constant format 8-16 bits integer and 32 bits float input supported");
+	if (!isConstantFormat(d.vi) || d.vi->format->sampleType != stFloat || d.vi->format->bitsPerSample != 32) {
+		vsapi->setError(out, "GradCurve: only constant format 32-bit float input supported: ret = core.resize.Bicubic(clip=ret, format=vs.RGBS)");
 		vsapi->freeNode(d.node);
 		return;
 	}
@@ -732,26 +683,29 @@ static void VS_CC GradCurveCreate(const VSMap *in, VSMap *out, void *userData, V
 		d.ovalue[3][i] = i;
 		d.ovalue[4][i] = i;
 	}
-	//scriptconfig()
+
+	//vdub scriptconfig()
 	d.proces = 1; //hard coded testing, RGB + R/G/B
 	d.filter = 2; //hard coded testing, curve file type ACV
-				  //d.filename = "D:/enc/032t.acv"; //hard coded testing, curve file
-	d.channel_mode = 0;//hard coded, copied from callback() rgb modes
-					   //d.offset = 0;//hard coded, copied from callback() rgb modes
-					   //d.laboff = 0;//hard coded, copied from callback() rgb modes
-					   //strcat(d.filename, "/media/sf_enc/032t.acv");//hard coded, file path for test
-					   //vdub end
+	d.channel_mode = 0;//hard coded testing, copied from vdub callback() rgb modes
+	
+	//vdub startproc()
+	ImportCurve(&d);
+	if (d.Labprecalc == 0 && d.proces == 8) {	// build up the LUT for the Lab process	if it is not precalculated already
+		PreCalcLut();
+		d.Labprecalc = 1;
+	}
 
 	GradCurveData * data = new GradCurveData(d);
 
-	vsapi->createFilter(in, out, "GradCurve", GradCurveInit, GradCurveGetFrame, GradCurveFree, fmParallelRequests, 0, data, core);
+	vsapi->createFilter(in, out, "GradCurve", GradCurveInit, GradCurveGetFrame, GradCurveFree, fmParallel, 0, data, core);
 }
 
 //////////////////////////////////////////
 // Init
 
 VS_EXTERNAL_API(void) VapourSynthPluginInit(VSConfigPlugin configFunc, VSRegisterFunction registerFunc, VSPlugin *plugin) {
-	configFunc("com.holywu.gradcurve", "grad", "Adjustment of contrast, brightness, gamma and a wide range of color manipulations through gradation curves is possible.", VAPOURSYNTH_API_VERSION, 1, plugin);
+	configFunc("com.xekon.gradcurve", "grad", "Adjustment of contrast, brightness, gamma and a wide range of color manipulations through gradation curves is possible.", VAPOURSYNTH_API_VERSION, 1, plugin);
 	registerFunc("Curve",
 		"clip:clip;"
 		"var:data:opt;",
