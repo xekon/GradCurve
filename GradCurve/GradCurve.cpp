@@ -599,23 +599,26 @@ static const VSFrameRef *VS_CC GradCurveGetFrame(int n, int activationReason, vo
 		float * VS_RESTRICT dstpR = reinterpret_cast<float *>(vsapi->getWritePtr(dst, 0));
 		float * VS_RESTRICT dstpG = reinterpret_cast<float *>(vsapi->getWritePtr(dst, 1));
 		float * VS_RESTRICT dstpB = reinterpret_cast<float *>(vsapi->getWritePtr(dst, 2));
-
+		float oldr, oldb, oldg;
+		int medr, medb, medg;
 		for (int y = 0; y < height; y++) {
 			for (int x = 0; x < width; x++) {
-				float oldr, oldb, oldg, medr, medb, medg;
-				oldr = srcpR[x];
-				oldb = srcpB[x];
-				oldg = srcpG[x];
-
+				oldr = srcpR[x]*255;
+				oldg = srcpG[x]*255;
+				oldb = srcpB[x]*255;
 				medr = d->rvalue[1][int(oldr)];
-				medb = d->ovalue[1][int(oldb)];
 				medg = d->gvalue[1][int(oldg)];
-
-				dstpR[x] = d->rvalue[0][int(medr)];
-				dstpB[x] = d->ovalue[0][int(medb)];
-				dstpG[x] = d->gvalue[0][int(medg)];
-			}
-			
+				medb = d->ovalue[3][int(oldb)];
+				//debug lines
+				int mr = (medr & 0xFF0000) >> 16;
+				int mg = (medg & 0x00FF00) >> 8;
+				int mb = (medb & 0x0000FF);
+				int test = d->rvalue[0][251];
+				//end debug
+				dstpR[x] = d->rvalue[0][(medr & 0xFF0000) >> 16];
+				dstpG[x] = d->gvalue[0][(medg & 0x00FF00) >> 8];
+				dstpB[x] = d->ovalue[0][(medb & 0x0000FF)];
+			}			
 			srcpR += srcStride;
 			srcpG += srcStride;
 			srcpB += srcStride;
@@ -686,7 +689,7 @@ static void VS_CC GradCurveCreate(const VSMap *in, VSMap *out, void *userData, V
 
 	//vdub scriptconfig()
 	d.proces = 1; //hard coded testing, RGB + R/G/B
-	d.filter = 2; //hard coded testing, curve file type ACV
+	d.filter = 9; //hard coded testing, curve file type ACV=2, amp smartcurve hsv=6, amp=9
 	d.channel_mode = 0;//hard coded testing, copied from vdub callback() rgb modes
 	
 	//vdub startproc()
