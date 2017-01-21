@@ -20,15 +20,16 @@ Usage
 * pmode: process mode: 0=RGB only, 1=RGB + R/G/B, 2=RGB weighted, 3=RGB weighted + R/G/B, 4=no processing
 
 	#example:
-	import vapoursynth as vs
-	core = vs.get_core()
-	core.std.LoadPlugin('G:/enc/VapourSynth-GradCurve-master/GradCurve/x64/Debug/GradCurve.dll')
-	src = core.d2v.Source(input=r'G:\enc\032t.d2v', rff=False)
-	src = core.resize.Bicubic(clip=src, format=vs.RGBS)
-	#src2 = core.grad.Curve(src,'G:/enc/032t.amp',7,1)
-	src2 = core.grad.Curve(src,'G:/enc/032t.acv',2,1)
-	src3 = core.std.StackHorizontal([src,src2])
-	#src2.set_output()
-	src3.set_output()
+	
+		import vapoursynth as vs
+		core = vs.get_core()
+		core.std.LoadPlugin('G:/enc/VapourSynth-GradCurve-master/GradCurve/x64/Debug/GradCurve.dll')
+		src = core.d2v.Source(input=r'G:\enc\032t.d2v', rff=False)
+		src = core.resize.Bicubic(clip=src, format=vs.RGBS)
+		#src2 = core.grad.Curve(src,'G:/enc/032t.amp',7,1)
+		src2 = core.grad.Curve(src,'G:/enc/032t.acv',2,1)
+		src3 = core.std.StackHorizontal([src,src2])
+		#src2.set_output()
+		src3.set_output()
 	
 project files that can be used for testing it: http://www.mediafire.com/file/9nc2etdr9i1tc9j/gradcurve.7z
