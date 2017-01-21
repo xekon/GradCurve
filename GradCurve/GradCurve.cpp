@@ -348,7 +348,7 @@ void ImportCurve(GradCurveData * d) // import curves
 					d->drwpoint[i][1][0] = 255;
 					d->drwpoint[i][1][1] = 255;
 				}
-				noocur = 5;  // xekon, value is never used?
+				noocur = 5;
 			}
 			cmtmp = d->channel_mode;
 			for (i = 0; i<5; i++) {	// calculate curve values
@@ -369,12 +369,10 @@ void ImportCurve(GradCurveData * d) // import curves
 			fseek(pFile, 0, SEEK_END);
 			lSize = ftell(pFile);
 			rewind(pFile);
-			// xekon temp comment out, possible error/bug
-			//for (i = 0; (i < 1280) && (feof(pFile) == 0); i++)
-			//{
-			//	fscanf(pFile, "%d", & stor[i]);
-			//}
-			// end xekon
+			for (i = 0; (i < 1280) && (feof(pFile) == 0); i++)
+			{
+				fscanf(pFile, "%d", & stor[i]);
+			}
 			fclose(pFile);
 			lSize = lSize / 4;
 		}
@@ -482,7 +480,7 @@ void ImportCurve(GradCurveData * d) // import curves
 		else
 		{
 			fseek(pFile, 0, SEEK_END);
-			lSize = ftell(pFile);  // xekon, value is never used?
+			lSize = ftell(pFile);
 			rewind(pFile);
 			for (i = 0; (i < 768) && (feof(pFile) == 0); i++)
 			{
@@ -599,16 +597,17 @@ static const VSFrameRef *VS_CC GradCurveGetFrame(int n, int activationReason, vo
 		float * VS_RESTRICT dstpR = reinterpret_cast<float *>(vsapi->getWritePtr(dst, 0));
 		float * VS_RESTRICT dstpG = reinterpret_cast<float *>(vsapi->getWritePtr(dst, 1));
 		float * VS_RESTRICT dstpB = reinterpret_cast<float *>(vsapi->getWritePtr(dst, 2));
-		float oldr, oldb, oldg;
-		int medr, medb, medg, med;
+		//someplace around here is where d.proces option would be used to facilitate different modes
+		//currently the below processes as if were using mode 1 RGB + R/G/B
+		int oldr, oldb, oldg, medr, medb, medg;
 		for (int y = 0; y < height; y++) {
 			for (int x = 0; x < width; x++) {
 				oldr = srcpR[x]*255;
 				oldg = srcpG[x]*255;
 				oldb = srcpB[x]*255;
-				medr = d->rvalue[1][int(oldr)];
-				medg = d->gvalue[1][int(oldg)];
-				medb = d->ovalue[3][int(oldb)];
+				medr = d->rvalue[1][oldr];
+				medg = d->gvalue[1][oldg];
+				medb = d->ovalue[3][oldb];
 				dstpR[x] = d->rvalue[0][(medr & 0xFF0000) >> 16] / float(16711680);
 				dstpG[x] = d->gvalue[0][(medg & 0x00FF00) >> 8] / float(65280);
 				dstpB[x] = d->ovalue[0][(medb & 0x0000FF)] / float(255);
@@ -643,7 +642,12 @@ static void VS_CC GradCurveCreate(const VSMap *in, VSMap *out, void *userData, V
 	GradCurveData d;
 
 	int err;
-	d.filename = static_cast<std::string>(vsapi->propGetData(in, "var", 0, &err));//xekon, curve file path for test
+	//vdub scriptconfig()
+	d.filename = static_cast<std::string>(vsapi->propGetData(in, "fname", 0, &err));//curve file path
+	d.filter = int64ToIntS(vsapi->propGetInt(in, "ftype", 0, &err));; //def:9 curve file type: ACV=2, amp smartcurve hsv=6, amp=9
+	d.proces = int64ToIntS(vsapi->propGetInt(in, "pmode", 0, &err));; //def:1 process mode: RGB + R/G/B
+
+	d.channel_mode = 0;//copied from vdub callback() rgb modes, this can probably stay hard coded unless i find a reason to process in another mode.
 
 	d.node = vsapi->propGetNode(in, "clip", 0, nullptr);
 	d.vi = vsapi->getVideoInfo(d.node);
@@ -681,11 +685,6 @@ static void VS_CC GradCurveCreate(const VSMap *in, VSMap *out, void *userData, V
 		d.ovalue[4][i] = i;
 	}
 
-	//vdub scriptconfig()
-	d.proces = 1; //hard coded testing, RGB + R/G/B
-	d.filter = 9; //hard coded testing, curve file type ACV=2, amp smartcurve hsv=6, amp=9
-	d.channel_mode = 0;//hard coded testing, copied from vdub callback() rgb modes
-	
 	//vdub startproc()
 	ImportCurve(&d);
 	if (d.Labprecalc == 0 && d.proces == 8) {	// build up the LUT for the Lab process	if it is not precalculated already
@@ -705,6 +704,8 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit(VSConfigPlugin configFunc, VSRegiste
 	configFunc("com.xekon.gradcurve", "grad", "Adjustment of contrast, brightness, gamma and a wide range of color manipulations through gradation curves is possible.", VAPOURSYNTH_API_VERSION, 1, plugin);
 	registerFunc("Curve",
 		"clip:clip;"
-		"var:data:opt;",
+		"fname:data:opt;" // curve file name
+		"ftype:int:opt;"  // def:7  curve file type: 2=ACV, 3=csv, 4=crv, 5=map, 6=amp Smartvurve hsv, 7=amp
+		"pmode:int:opt;", // def:1 process mode: 0=RGB only, 1=RGB + R/G/B, 2=RGB weighted, 3=RGB weighted + R/G/B, 4=no processing
 		GradCurveCreate, nullptr, plugin);
 }
