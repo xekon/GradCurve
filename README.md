@@ -45,7 +45,7 @@ linux example:
 	#src2.set_output()
 	src3.set_output()
 	
-To install to windows download the [DLL](github.com/xekon/GradCurve/raw/master/GradCurve/x64/Release/GradCurve.dll), and place it in your VapourSynth\plugins64 directory.
+To install to windows download the [DLL](raw/master/GradCurve/x64/Release/GradCurve.dll), and place it in your VapourSynth\plugins64 directory.
 	
 windows example:
 =====
