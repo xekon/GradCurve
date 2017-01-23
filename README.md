@@ -19,7 +19,35 @@ Usage
 
 * pmode: process mode: 0=RGB only, 1=RGB + R/G/B, 2=RGB weighted, 3=RGB weighted + R/G/B, 4=no processing
 
-example
+project files that can be used for testing it: http://www.mediafire.com/file/9nc2etdr9i1tc9j/gradcurve.7z
+
+linux install:
+=====
+
+	cd $HOME/.installs/VapourSynthPlugins
+	git clone https://github.com/xekon/GradCurve
+	cd GradCurve
+	chmod +x configure
+	./configure
+	make
+	sudo make install
+
+linux example:
+=====
+
+	import vapoursynth as vs
+	core = vs.get_core()
+	src = core.d2v.Source(input=r'/media/enc/032t.d2v', rff=False)
+	src = core.resize.Bicubic(clip=src, format=vs.RGBS)
+	#src2 = core.grad.Curve(src,'/media/enc/032t.amp',7,1)
+	src2 = core.grad.Curve(src,'/media/enc/032t.acv',2,1)
+	src3 = core.std.StackHorizontal([src,src2])
+	#src2.set_output()
+	src3.set_output()
+	
+To install to windows download the Dll, and place it in your VapourSynth\plugins64 directory.
+	
+windows example:
 =====
 
 	import vapoursynth as vs
@@ -32,5 +60,3 @@ example
 	src3 = core.std.StackHorizontal([src,src2])
 	#src2.set_output()
 	src3.set_output()
-
-project files that can be used for testing it: http://www.mediafire.com/file/9nc2etdr9i1tc9j/gradcurve.7z
