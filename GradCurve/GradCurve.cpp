@@ -603,8 +603,14 @@ static const VSFrameRef *VS_CC GradCurveGetFrame(int n, int activationReason, vo
 		for (int y = 0; y < height; y++) {
 			for (int x = 0; x < width; x++) {
 				oldr = srcpR[x]*255;
+				if (oldr < 0) { oldr = 0; }
+				if (oldr > 255) { oldr = 255; }
 				oldg = srcpG[x]*255;
+				if (oldg < 0) { oldg = 0; }
+				if (oldg > 255) { oldg = 255; }
 				oldb = srcpB[x]*255;
+				if (oldb < 0) { oldb = 0; }
+				if (oldb > 255) { oldb = 255; }
 				medr = d->rvalue[1][oldr];
 				medg = d->gvalue[1][oldg];
 				medb = d->ovalue[3][oldb];
