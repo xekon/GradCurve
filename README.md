@@ -13,7 +13,7 @@ Usage
 
 * clip: Clip to process. Only planar format with float sample type of 32 bit depth is supported.
 
-* fname: The path to the '.acv' curve file, more formats such as .amp will be supported once initial testing is completed.
+* fname: The curve file path.
 
 * ftype: The curve file type: 2=ACV, 3=csv, 4=crv, 5=map, 6=amp Smartvurve hsv, 7=amp
 
