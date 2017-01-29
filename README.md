@@ -37,13 +37,14 @@ linux example:
 
 	import vapoursynth as vs
 	core = vs.get_core()
-	src = core.d2v.Source(input=r'/media/enc/032t.d2v', rff=False)
+	#core.std.LoadPlugin("/media/sf_moon/enc/libgradcurve.so")
+	src = core.d2v.Source(input=r'/media/sf_moon/enc/003b/003b.d2v', rff=False)
 	src = core.resize.Bicubic(clip=src, format=vs.RGBS)
-	#src2 = core.grad.Curve(src,'/media/enc/032t.amp',7,1)
-	src2 = core.grad.Curve(src,'/media/enc/032t.acv',2,1)
-	src3 = core.std.StackHorizontal([src,src2])
-	#src2.set_output()
-	src3.set_output()
+	prev = src
+	src = core.grad.Curve(src,'/media/sf_moon/enc/003a/003a.amp',7,1)
+	#src = core.grad.Curve(src,'/media/sf_moon/enc/003a/003a.acv',2,1)
+	src = core.std.StackHorizontal([prev,src])
+	src.set_output()
 	
 Windows install, download the [DLL](GradCurve/x64/Release/GradCurve.dll), and place it in your VapourSynth\plugins64 directory.
 	
@@ -52,11 +53,11 @@ windows example:
 
 	import vapoursynth as vs
 	core = vs.get_core()
-	core.std.LoadPlugin('G:/enc/VapourSynth-GradCurve-master/GradCurve/x64/Debug/GradCurve.dll')
-	src = core.d2v.Source(input=r'G:\enc\032t.d2v', rff=False)
+	#core.std.LoadPlugin('G:/moon/enc/VapourSynth-GradCurve-master/GradCurve/x64/Release/GradCurve.dll')
+	src = core.d2v.Source(input=r'G:/moon/enc/003b/003b.d2v', rff=False)
 	src = core.resize.Bicubic(clip=src, format=vs.RGBS)
-	#src2 = core.grad.Curve(src,'G:/enc/032t.amp',7,1)
-	src2 = core.grad.Curve(src,'G:/enc/032t.acv',2,1)
-	src3 = core.std.StackHorizontal([src,src2])
-	#src2.set_output()
-	src3.set_output()
+	prev = src
+	src = core.grad.Curve(src,'G:/moon/enc/003b/003b.amp',7,1)
+	#src = core.grad.Curve(src,'G:/moon/enc/003b/003b.acv',2,1)
+	src = core.std.StackHorizontal([prev,src])
+	src.set_output()
