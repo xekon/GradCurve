@@ -592,14 +592,15 @@ static const VSFrameRef *VS_CC GradCurveGetFrame(int n, int activationReason, vo
 		const int srcStride = vsapi->getStride(src, 0);
 		const int dstStride = vsapi->getStride(dst, 0);
 		const unsigned char * srcpR = reinterpret_cast<const unsigned char *>(vsapi->getReadPtr(src, 0));
-		const unsigned char * srcpG = reinterpret_cast<const unsigned char *>(vsapi->getReadPtr(src, 1));//reinterpret_cast<const unsigned char *>
+		const unsigned char * srcpG = reinterpret_cast<const unsigned char *>(vsapi->getReadPtr(src, 1));
 		const unsigned char * srcpB = reinterpret_cast<const unsigned char *>(vsapi->getReadPtr(src, 2));
 		unsigned char * VS_RESTRICT dstpR = reinterpret_cast<unsigned char *>(vsapi->getWritePtr(dst, 0));
 		unsigned char * VS_RESTRICT dstpG = reinterpret_cast<unsigned char *>(vsapi->getWritePtr(dst, 1));
 		unsigned char * VS_RESTRICT dstpB = reinterpret_cast<unsigned char *>(vsapi->getWritePtr(dst, 2));
 		//someplace around here is where d.proces option would be used to facilitate different modes
 		//currently the below processes as if were using mode 1 RGB + R/G/B
-		int oldr, oldb, oldg, medr, medb, medg;
+		//adding the other modes is what I will add to the plugin next.
+		int64_t oldr, oldb, oldg, medr, medb, medg;
 		for (int y = 0; y < height; y++) {
 			for (int x = 0; x < width; x++) {
 				oldr = static_cast<int64_t>(srcpR[x]);
