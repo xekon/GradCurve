@@ -39,7 +39,7 @@ linux example:
 	core = vs.get_core()
 	#core.std.LoadPlugin("/media/sf_moon/enc/libgradcurve.so")
 	src = core.d2v.Source(input=r'/media/sf_moon/enc/GradCurve/003b.d2v', rff=False)
-	src = core.resize.Bicubic(clip=src, format=vs.RGBS)
+	src = core.resize.Bicubic(clip=src, format=vs.RGB24)
 	prev = src
 	src = core.grad.Curve(src,'/media/sf_moon/enc/GradCurve/003b.amp',7,1)
 	#src = core.grad.Curve(src,'/media/sf_moon/enc/GradCurve/003b.acv',2,1)
@@ -55,7 +55,7 @@ windows example:
 	core = vs.get_core()
 	#core.std.LoadPlugin('G:/moon/enc/VapourSynth-GradCurve-master/GradCurve/x64/Release/GradCurve.dll')
 	src = core.d2v.Source(input=r'G:/moon/enc/GradCurve/003b.d2v', rff=False)
-	src = core.resize.Bicubic(clip=src, format=vs.RGBS)
+	src = core.resize.Bicubic(clip=src, format=vs.RGB24)
 	prev = src
 	src = core.grad.Curve(src,'G:/moon/enc/GradCurve/003b.amp',7,1)
 	#src = core.grad.Curve(src,'G:/moon/enc/GradCurve/003b.acv',2,1)

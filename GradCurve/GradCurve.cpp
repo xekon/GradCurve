@@ -371,7 +371,7 @@ void ImportCurve(GradCurveData * d) // import curves
 			rewind(pFile);
 			for (i = 0; (i < 1280) && (feof(pFile) == 0); i++)
 			{
-				fscanf(pFile, "%d", & stor[i]);
+				fscanf(pFile, "%d", &stor[i]);
 			}
 			fclose(pFile);
 			lSize = lSize / 4;
@@ -589,35 +589,29 @@ static const VSFrameRef *VS_CC GradCurveGetFrame(int n, int activationReason, vo
 		//borrowed and modified from Waifu2x-w2xc
 		const int width = vsapi->getFrameWidth(src, 0);
 		const int height = vsapi->getFrameHeight(src, 0);
-		const int srcStride = vsapi->getStride(src, 0) / sizeof(float);
-		const int dstStride = vsapi->getStride(dst, 0) / sizeof(float);
-		const float * srcpR = reinterpret_cast<const float *>(vsapi->getReadPtr(src, 0));
-		const float * srcpG = reinterpret_cast<const float *>(vsapi->getReadPtr(src, 1));
-		const float * srcpB = reinterpret_cast<const float *>(vsapi->getReadPtr(src, 2));
-		float * VS_RESTRICT dstpR = reinterpret_cast<float *>(vsapi->getWritePtr(dst, 0));
-		float * VS_RESTRICT dstpG = reinterpret_cast<float *>(vsapi->getWritePtr(dst, 1));
-		float * VS_RESTRICT dstpB = reinterpret_cast<float *>(vsapi->getWritePtr(dst, 2));
+		const int srcStride = vsapi->getStride(src, 0);
+		const int dstStride = vsapi->getStride(dst, 0);
+		const unsigned char * srcpR = reinterpret_cast<const unsigned char *>(vsapi->getReadPtr(src, 0));
+		const unsigned char * srcpG = reinterpret_cast<const unsigned char *>(vsapi->getReadPtr(src, 1));//reinterpret_cast<const unsigned char *>
+		const unsigned char * srcpB = reinterpret_cast<const unsigned char *>(vsapi->getReadPtr(src, 2));
+		unsigned char * VS_RESTRICT dstpR = reinterpret_cast<unsigned char *>(vsapi->getWritePtr(dst, 0));
+		unsigned char * VS_RESTRICT dstpG = reinterpret_cast<unsigned char *>(vsapi->getWritePtr(dst, 1));
+		unsigned char * VS_RESTRICT dstpB = reinterpret_cast<unsigned char *>(vsapi->getWritePtr(dst, 2));
 		//someplace around here is where d.proces option would be used to facilitate different modes
 		//currently the below processes as if were using mode 1 RGB + R/G/B
 		int oldr, oldb, oldg, medr, medb, medg;
 		for (int y = 0; y < height; y++) {
 			for (int x = 0; x < width; x++) {
-				oldr = srcpR[x]*255;
-				if (oldr < 0) { oldr = 0; }
-				if (oldr > 255) { oldr = 255; }
-				oldg = srcpG[x]*255;
-				if (oldg < 0) { oldg = 0; }
-				if (oldg > 255) { oldg = 255; }
-				oldb = srcpB[x]*255;
-				if (oldb < 0) { oldb = 0; }
-				if (oldb > 255) { oldb = 255; }
-				medr = d->rvalue[1][oldr];
-				medg = d->gvalue[1][oldg];
-				medb = d->ovalue[3][oldb];
-				dstpR[x] = d->rvalue[0][(medr & 0xFF0000) >> 16] / float(16711680);
-				dstpG[x] = d->gvalue[0][(medg & 0x00FF00) >> 8] / float(65280);
-				dstpB[x] = d->ovalue[0][(medb & 0x0000FF)] / float(255);
-			}			
+				oldr = static_cast<int64_t>(srcpR[x]);
+				oldg = static_cast<int64_t>(srcpG[x]);
+				oldb = static_cast<int64_t>(srcpB[x]);
+				medr = (d->rvalue[1][oldr] & 0xFF0000) >> 16;
+				medg = (d->gvalue[1][oldg] & 0x00FF00) >> 8;
+				medb = (d->ovalue[3][oldb] & 0x0000FF);
+				dstpR[x] = static_cast<uint8_t>((d->rvalue[0][medr] & 0xFF0000) >> 16);
+				dstpG[x] = static_cast<uint8_t>((d->gvalue[0][medg] & 0x00FF00) >> 8);
+				dstpB[x] = static_cast<uint8_t>((d->ovalue[0][medb] & 0x0000FF));
+			}
 			srcpR += srcStride;
 			srcpG += srcStride;
 			srcpB += srcStride;
@@ -658,8 +652,8 @@ static void VS_CC GradCurveCreate(const VSMap *in, VSMap *out, void *userData, V
 	d.node = vsapi->propGetNode(in, "clip", 0, nullptr);
 	d.vi = vsapi->getVideoInfo(d.node);
 
-	if (!isConstantFormat(d.vi) || d.vi->format->sampleType != stFloat || d.vi->format->bitsPerSample != 32) {
-		vsapi->setError(out, "GradCurve: only constant format 32-bit float input supported: ret = core.resize.Bicubic(clip=ret, format=vs.RGBS)");
+	if (!isConstantFormat(d.vi) || d.vi->format->sampleType != stInteger || d.vi->format->bitsPerSample != 8) {
+		vsapi->setError(out, "GradCurve: only constant format 8-bit integer input supported: src = core.resize.Bicubic(clip=src, format=vs.RGB24)");
 		vsapi->freeNode(d.node);
 		return;
 	}
