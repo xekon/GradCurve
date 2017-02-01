@@ -4,7 +4,7 @@
 //      http://members.chello.at/nagiller/vdub/readme.html
 //      http://forum.doom9.org/showthread.php?t=133191
 //  Speed optimizations for HSV and CMYK by Achim Stahlberger.
-//  modified by Xekon
+//  modified by Xekon:
 //      http://forum.doom9.org/showthread.php?t=174096
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -27,9 +27,10 @@
 // Date         Version  Developer           Changes
 //
 // 21 Mar 2008  1.4.5.0  Alexander Nagiller  Final Release for VirtualDub.
-//										       http://members.chello.at/nagiller/vdub/history.html
-// 24 Dec 2016  1.5.0.0  Xekon               First release, Port for VapourSynth
+//						 http://members.chello.at/nagiller/vdub/history.html
 //
+// 24 Dec 2016  1.5.0.0  Xekon               First release, Port for VapourSynth
+// 01 Feb 2017  2.0.0.0  Xekon               Added remaining functionality
 /////////////////////////////////////////////////////////////////////////////
 
 #include <stdio.h>
@@ -45,20 +46,19 @@ int64_t *labrgb; //LUT Lab
 struct GradCurveData {
 	VSNodeRef * node;
 	const VSVideoInfo * vi;
-	// xekon add vdub
-	int64_t rvalue[3][256];
+	int rvalue[3][256];
 	int gvalue[3][256];
 	int bvalue[256];
 	int ovalue[5][256];
+	std::string filename;// curve file name
+	int filter;//curve file type: 1=amp (default), 2=ACV, 3=csv, 4=crv, 5=map, 6=amp Smartvurve hsv
+	int proces;//process mode: 0=RGB only, 1=RGB + R/G/B (default), 2=RGB weighted, 3=RGB weighted + R/G/B, 4=no processing, 5=YUV, 6=CMYK, 7=HSV, 8=LAB
 	int channel_mode;
-	int proces;
-	std::string filename;
-	int filter;
-	bool Labprecalc;
 	int drwmode[5];
 	int drwpoint[5][16][2];
 	int poic[5];
 	char gamma[10];
+	bool Labprecalc;
 };
 
 void PreCalcLut()
@@ -76,7 +76,6 @@ void PreCalcLut()
 	int r;
 	int g;
 	int b;
-
 	rgblab = new int64_t[16777216];
 	labrgb = new int64_t[16777216];
 
@@ -186,7 +185,6 @@ void CalcCurve(GradCurveData * d)
 			b[i] = 0;
 			c[i] = 0;
 		}
-
 		if (d->poic[d->channel_mode]>3) {	//curve has more than 3 coordinates
 			j = d->poic[d->channel_mode] - 3;		 //fill the matrix needed to calculate the b coefficients of the cubic functions an*x^3+bn*x^2+cn*x+dn
 			x[0][0] = double(2 * (d->drwpoint[d->channel_mode][2][0] - d->drwpoint[d->channel_mode][0][0]));
@@ -245,37 +243,37 @@ void CalcCurve(GradCurveData * d)
 	switch (d->channel_mode) { //for faster RGB modes
 	case 0:
 		for (i = 0; i<256; i++) {
-			d->rvalue[0][i] = (d->ovalue[0][i] << 16);
-			d->rvalue[2][i] = (d->ovalue[0][i] - i) << 16;
-			d->gvalue[0][i] = (d->ovalue[0][i] << 8);
-			d->gvalue[2][i] = (d->ovalue[0][i] - i) << 8;
+			d->rvalue[0][i] = (d->ovalue[0][i]);
+			d->rvalue[2][i] = (d->ovalue[0][i] - i);
+			d->gvalue[0][i] = (d->ovalue[0][i]);
+			d->gvalue[2][i] = (d->ovalue[0][i] - i);
 			d->bvalue[i] = d->ovalue[0][i] - i;
 		}
 		break;
 	case 1:
-		for (i = 0; i<256; i++) { d->rvalue[1][i] = (d->ovalue[1][i] << 16); }
+		for (i = 0; i<256; i++) { d->rvalue[1][i] = (d->ovalue[1][i]); }
 		break;
 	case 2:
-		for (i = 0; i<256; i++) { d->gvalue[1][i] = (d->ovalue[2][i] << 8); }
+		for (i = 0; i<256; i++) { d->gvalue[1][i] = (d->ovalue[2][i]); }
 		break;
 	}
 }
 
-void ImportCurve(GradCurveData * d) // import curves
+void ImportCurve(GradCurveData * d)
 {
 	FILE *pFile;
 	int i;
 	int j;
 	int stor[1280];
 	int temp[1280];
-	int64_t lSize = 0;//xekon set 0 default, clear uninitialized error
+	int64_t lSize = 0;
 	int beg;
 	int cv;
-	int count = 0;//xekon set 0 default, clear uninitialized error
-	int noocur = 0;//xekon set 0 default, clear uninitialized error
+	int count = 0;
+	int noocur = 0;
 	int curpos;
 	int cordpos;
-	int curposnext = 0;//xekon set 0 default, clear uninitialized error
+	int curposnext = 0;
 	int cordcount;
 	int cmtmp;
 	int drwmodtmp;
@@ -290,12 +288,11 @@ void ImportCurve(GradCurveData * d) // import curves
 	nrf = false;
 
 	for (i = 0; i<5; i++) { d->drwmode[i] = 0; }
-
 	if (d->filter == 2)	// *.acv
 	{
 		pFile = fopen(d->filename.c_str(), "rb");
 		if (pFile == NULL) {
-			//vsapi->setError(out, "GradCurve: Error opening file"); 
+			printf("GradCurve: Error opening file.\n");
 		}
 		else
 		{
@@ -362,7 +359,8 @@ void ImportCurve(GradCurveData * d) // import curves
 	}
 	if (d->filter == 3) { // *.csv
 		pFile = fopen(d->filename.c_str(), "r");
-		if (pFile == NULL) { //vsapi->setError(out, "GradCurve: Error opening file");
+		if (pFile == NULL) {
+			printf("GradCurve: Error opening file.\n");
 		}
 		else
 		{
@@ -371,7 +369,9 @@ void ImportCurve(GradCurveData * d) // import curves
 			rewind(pFile);
 			for (i = 0; (i < 1280) && (feof(pFile) == 0); i++)
 			{
-				fscanf(pFile, "%d", &stor[i]);
+				if (fscanf(pFile, "%d", &stor[i]) != 1) {
+					printf("GradCurve: Failed to read integer from csv curve file.\n");
+				}
 			}
 			fclose(pFile);
 			lSize = lSize / 4;
@@ -384,7 +384,8 @@ void ImportCurve(GradCurveData * d) // import curves
 		curposnext = 65530;
 		cordpos = beg + 6;
 		pFile = fopen(d->filename.c_str(), "rb");
-		if (pFile == NULL) { //vsapi->setError(out, "GradCurve: Error opening file");
+		if (pFile == NULL) {
+			printf("GradCurve: Error opening file.\n");
 		}
 		else
 		{
@@ -403,7 +404,7 @@ void ImportCurve(GradCurveData * d) // import curves
 					}
 				}
 				if (i == beg + 1 && d->drwmode[curpos] == 3) { gma = cv; }
-				if (i == beg + 2 && d->drwmode[curpos] == 3) { gma = gma + (cv << 8); }
+				if (i == beg + 2 && d->drwmode[curpos] == 3) { gma = gma + (cv); }
 				if (i == beg + 5) {
 					d->poic[curpos] = cv;
 					cordpos = i + 1;
@@ -475,7 +476,8 @@ void ImportCurve(GradCurveData * d) // import curves
 	else if (d->filter == 6)	// *.amp Smartvurve hsv
 	{
 		pFile = fopen(d->filename.c_str(), "rb");
-		if (pFile == NULL) { //vsapi->setError(out, "GradCurve: Error opening file");
+		if (pFile == NULL) {
+			printf("GradCurve: Error opening file.\n");
 		}
 		else
 		{
@@ -504,7 +506,8 @@ void ImportCurve(GradCurveData * d) // import curves
 	else
 	{
 		pFile = fopen(d->filename.c_str(), "rb"); // *.amp
-		if (pFile == NULL) { //vsapi->setError(out, "GradCurve: Error opening file");
+		if (pFile == NULL) {
+			printf("GradCurve: Error opening file.\n");
 		}
 		else
 		{
@@ -518,23 +521,23 @@ void ImportCurve(GradCurveData * d) // import curves
 			fclose(pFile);
 		}
 	}
-	if (nrf == false) { //fill curves for non coordinates file types
+	if (nrf == false) { //fill curves for non coordinates file types amp/csv/amp hsv
 		if (lSize > 768) {
 			for (i = 0; i < 256; i++) {
 				d->ovalue[0][i] = stor[i];
-				d->rvalue[0][i] = (d->ovalue[0][i] << 16);
-				d->rvalue[2][i] = (d->ovalue[0][i] - i) << 16;
-				d->gvalue[0][i] = (d->ovalue[0][i] << 8);
-				d->gvalue[2][i] = (d->ovalue[0][i] - i) << 8;
+				d->rvalue[0][i] = (d->ovalue[0][i]);
+				d->rvalue[2][i] = (d->ovalue[0][i] - i);
+				d->gvalue[0][i] = (d->ovalue[0][i]);
+				d->gvalue[2][i] = (d->ovalue[0][i] - i);
 				d->bvalue[i] = d->ovalue[0][i] - i;
 			}
 			for (i = 256; i < 512; i++) {
 				d->ovalue[1][(i - 256)] = stor[i];
-				d->rvalue[1][(i - 256)] = (d->ovalue[1][(i - 256)] << 16);
+				d->rvalue[1][(i - 256)] = (d->ovalue[1][(i - 256)]);
 			}
 			for (i = 512; i < 768; i++) {
 				d->ovalue[2][(i - 512)] = stor[i];
-				d->gvalue[1][(i - 512)] = (d->ovalue[2][(i - 512)] << 8);
+				d->gvalue[1][(i - 512)] = (d->ovalue[2][(i - 512)]);
 			}
 			for (i = 768; i < 1024; i++) { d->ovalue[3][(i - 768)] = stor[i]; }
 			for (i = 1024; i < 1280; i++) { d->ovalue[4][(i - 1024)] = stor[i]; }
@@ -542,21 +545,21 @@ void ImportCurve(GradCurveData * d) // import curves
 		if (lSize < 769 && lSize > 256) {
 			for (i = 0; i < 256; i++) {
 				d->ovalue[1][i] = stor[i];
-				d->rvalue[1][i] = (d->ovalue[1][i] << 16);
+				d->rvalue[1][i] = (d->ovalue[1][i]);
 			}
 			for (i = 256; i < 512; i++) {
 				d->ovalue[2][(i - 256)] = stor[i];
-				d->gvalue[1][(i - 256)] = (d->ovalue[2][(i - 256)] << 8);
+				d->gvalue[1][(i - 256)] = (d->ovalue[2][(i - 256)]);
 			}
 			for (i = 512; i < 768; i++) { d->ovalue[3][(i - 512)] = stor[i]; }
 		}
 		if (lSize < 257 && lSize > 0) {
 			for (i = 0; i < 256; i++) {
 				d->ovalue[0][i] = stor[i];
-				d->rvalue[0][i] = (d->ovalue[0][i] << 16);
-				d->rvalue[2][i] = (d->ovalue[0][i] - i) << 16;
-				d->gvalue[0][i] = (d->ovalue[0][i] << 8);
-				d->gvalue[2][i] = (d->ovalue[0][i] - i) << 8;
+				d->rvalue[0][i] = (d->ovalue[0][i]);
+				d->rvalue[2][i] = (d->ovalue[0][i] - i);
+				d->gvalue[0][i] = (d->ovalue[0][i]);
+				d->gvalue[2][i] = (d->ovalue[0][i] - i);
 				d->bvalue[i] = d->ovalue[0][i] - i;
 			}
 		}
@@ -586,7 +589,6 @@ static const VSFrameRef *VS_CC GradCurveGetFrame(int n, int activationReason, vo
 		const VSFrameRef * src = vsapi->getFrameFilter(n, d->node, frameCtx);
 		VSFrameRef * dst = vsapi->copyFrame(src, core);
 
-		//borrowed and modified from Waifu2x-w2xc
 		const int width = vsapi->getFrameWidth(src, 0);
 		const int height = vsapi->getFrameHeight(src, 0);
 		const int srcStride = vsapi->getStride(src, 0);
@@ -597,37 +599,336 @@ static const VSFrameRef *VS_CC GradCurveGetFrame(int n, int activationReason, vo
 		unsigned char * VS_RESTRICT dstpR = reinterpret_cast<unsigned char *>(vsapi->getWritePtr(dst, 0));
 		unsigned char * VS_RESTRICT dstpG = reinterpret_cast<unsigned char *>(vsapi->getWritePtr(dst, 1));
 		unsigned char * VS_RESTRICT dstpB = reinterpret_cast<unsigned char *>(vsapi->getWritePtr(dst, 2));
-		//someplace around here is where d.proces option would be used to facilitate different modes
-		//currently the below processes as if were using mode 1 RGB + R/G/B
-		//adding the other modes is what I will add to the plugin next.
-		int64_t oldr, oldb, oldg, medr, medb, medg;
-		for (int y = 0; y < height; y++) {
-			for (int x = 0; x < width; x++) {
-				oldr = static_cast<int64_t>(srcpR[x]);
-				oldg = static_cast<int64_t>(srcpG[x]);
-				oldb = static_cast<int64_t>(srcpB[x]);
-				medr = (d->rvalue[1][oldr] & 0xFF0000) >> 16;
-				medg = (d->gvalue[1][oldg] & 0x00FF00) >> 8;
-				medb = (d->ovalue[3][oldb] & 0x0000FF);
-				dstpR[x] = static_cast<uint8_t>((d->rvalue[0][medr] & 0xFF0000) >> 16);
-				dstpG[x] = static_cast<uint8_t>((d->gvalue[0][medg] & 0x00FF00) >> 8);
-				dstpB[x] = static_cast<uint8_t>((d->ovalue[0][medb] & 0x0000FF));
+		int64_t r, rr, b, g, bb, gg;
+		switch (d->proces)
+		{
+		case 0://RGB (default)
+			for (int y = 0; y < height; y++) {
+				for (int x = 0; x < width; x++) {
+					r = static_cast<int>(srcpR[x]);
+					g = static_cast<int>(srcpG[x]);
+					b = static_cast<int>(srcpB[x]);
+					dstpR[x] = static_cast<uint8_t>(d->rvalue[0][r]);
+					dstpG[x] = static_cast<uint8_t>(d->gvalue[0][g]);
+					dstpB[x] = static_cast<uint8_t>(d->ovalue[0][b]);
+				}
+				srcpR += srcStride;
+				srcpG += srcStride;
+				srcpB += srcStride;
+				dstpR += dstStride;
+				dstpG += dstStride;
+				dstpB += dstStride;
 			}
-			srcpR += srcStride;
-			srcpG += srcStride;
-			srcpB += srcStride;
-
-			dstpR += dstStride;
-			dstpG += dstStride;
-			dstpB += dstStride;
+			break;
+		case 1://RGB + R/G/B
+			for (int y = 0; y < height; y++) {
+				for (int x = 0; x < width; x++) {
+					r = static_cast<int>(srcpR[x]);
+					g = static_cast<int>(srcpG[x]);
+					b = static_cast<int>(srcpB[x]);
+					rr = d->rvalue[1][r];
+					gg = d->gvalue[1][g];
+					bb = d->ovalue[3][b];
+					dstpR[x] = static_cast<uint8_t>(d->rvalue[0][rr]);
+					dstpG[x] = static_cast<uint8_t>(d->gvalue[0][gg]);
+					dstpB[x] = static_cast<uint8_t>(d->ovalue[0][bb]);
+				}
+				srcpR += srcStride;
+				srcpG += srcStride;
+				srcpB += srcStride;
+				dstpR += dstStride;
+				dstpG += dstStride;
+				dstpB += dstStride;
+			}
+			break;
+		case 2://RGB weighted
+			for (int y = 0; y < height; y++) {
+				for (int x = 0; x < width; x++) {
+					r = static_cast<int>(srcpR[x] << 16);
+					g = static_cast<int>(srcpG[x] << 8);
+					b = static_cast<int>(srcpB[x]);
+					int64_t bw = int((77 * (r >> 16) + 150 * (g >> 8) + 29 * b) >> 8);
+					r = r + d->rvalue[2][bw];
+					if (r<65536) r = 0; else if (r>16711680) r = 16711680;
+					g = g + d->gvalue[2][bw];
+					if (g<256) g = 0; else if (g>65280) g = 65280;
+					b = b + d->bvalue[bw];
+					if (b<0) b = 0; else if (b>255) b = 255;
+					dstpR[x] = static_cast<uint8_t>((r & 0xFF0000) >> 16);
+					dstpG[x] = static_cast<uint8_t>((g & 0x00FF00) >> 8);
+					dstpB[x] = static_cast<uint8_t>((b & 0x0000FF));
+				}
+				srcpR += srcStride;
+				srcpG += srcStride;
+				srcpB += srcStride;
+				dstpR += dstStride;
+				dstpG += dstStride;
+				dstpB += dstStride;
+			}
+			break;
+		case 3://RGB weighted + R/G/B
+			for (int y = 0; y < height; y++) {
+				for (int x = 0; x < width; x++) {
+					r = static_cast<int>(srcpR[x]);
+					g = static_cast<int>(srcpG[x]);
+					b = static_cast<int>(srcpB[x]);
+					rr = d->rvalue[1][r] << 16;
+					gg = d->gvalue[1][g] << 8;
+					bb = d->ovalue[3][b];
+					int64_t bw = int((77 * (rr >> 16) + 150 * (gg >> 8) + 29 * bb) >> 8);
+					rr = rr + d->rvalue[2][bw];
+					if (rr<65536) rr = 0; else if (rr>16711680) rr = 16711680;
+					gg = gg + d->gvalue[2][bw];
+					if (gg<256) gg = 0; else if (gg>65280) gg = 65280;
+					bb = bb + d->bvalue[bw];
+					if (bb<0) bb = 0; else if (bb>255) bb = 255;
+					dstpR[x] = static_cast<uint8_t>((rr & 0xFF0000) >> 16);
+					dstpG[x] = static_cast<uint8_t>((gg & 0x00FF00) >> 8);
+					dstpB[x] = static_cast<uint8_t>((bb & 0x0000FF));
+				}
+				srcpR += srcStride;
+				srcpG += srcStride;
+				srcpB += srcStride;
+				dstpR += dstStride;
+				dstpG += dstStride;
+				dstpB += dstStride;
+			}
+			break;
+		case 4://No processing
+			for (int y = 0; y < height; y++) {
+				for (int x = 0; x < width; x++) {
+					r = static_cast<int>(srcpR[x]);
+					g = static_cast<int>(srcpG[x]);
+					b = static_cast<int>(srcpB[x]);
+					dstpR[x] = static_cast<uint8_t>(r);
+					dstpG[x] = static_cast<uint8_t>(g);
+					dstpB[x] = static_cast<uint8_t>(b);
+				}
+				srcpR += srcStride;
+				srcpG += srcStride;
+				srcpB += srcStride;
+				dstpR += dstStride;
+				dstpG += dstStride;
+				dstpB += dstStride;
+			}
+			break;
+		case 5://YUV
+			int64_t s, t, u;
+			for (int y = 0; y < height; y++) {
+				for (int x = 0; x < width; x++) {
+					r = static_cast<int>(srcpR[x]);
+					g = static_cast<int>(srcpG[x]);
+					b = static_cast<int>(srcpB[x]);
+					//RGB to YUV (s=Y t=U u=V)
+					s = (32768 + 19595 * r + 38470 * g + 7471 * b) >> 16; //correct rounding +32768 
+					t = (8421375 - 11058 * r - 21710 * g + 32768 * b) >> 16; //correct rounding +32768
+					u = (8421375 + 32768 * r - 27439 * g - 5329 * b) >> 16; //correct rounding +32768																			 
+					s = (d->ovalue[1][s]) << 16;// Applting the curves
+					t = (d->ovalue[2][t]) - 128;
+					u = (d->ovalue[3][u]) - 128;
+					// YUV to RGB
+					rr = (32768 + s + 91881 * u); //correct rounding +32768
+					if (rr<0) { r = 0; }
+					else if (rr>16711680) { r = 16711680; }
+					else { r = (rr & 0xFF0000); }
+					gg = (32768 + s - 22553 * t - 46802 * u); //correct rounding +32768
+					if (gg<0) { g = 0; }
+					else if (gg>16711680) { g = 65280; }
+					else { g = (gg & 0xFF0000) >> 8; }
+					bb = (32768 + s + 116130 * t); //correct rounding +32768
+					if (bb<0) { b = 0; }
+					else if (bb>16711680) { b = 255; }
+					else { b = bb >> 16; }
+					dstpR[x] = static_cast<uint8_t>((r & 0xFF0000) >> 16);
+					dstpG[x] = static_cast<uint8_t>((g & 0x00FF00) >> 8);
+					dstpB[x] = static_cast<uint8_t>((b & 0x0000FF));
+				}
+				srcpR += srcStride;
+				srcpG += srcStride;
+				srcpB += srcStride;
+				dstpR += dstStride;
+				dstpG += dstStride;
+				dstpB += dstStride;
+			}
+			break;
+		case 6://CMYK
+			int64_t e, f, v, z, div, divh;
+			for (int y = 0; y < height; y++) {
+				for (int x = 0; x < width; x++) {
+					r = static_cast<int>(srcpR[x]);
+					g = static_cast<int>(srcpG[x]);
+					b = static_cast<int>(srcpB[x]);
+					if (r >= g && r >= b) {/* r is Maximum */
+						v = 255 - r;
+						div = r + 1;
+						divh = div >> 1;
+						e = 0;
+						f = (((r - g) << 8) + divh) / div;//correct rounding  ff+(div>>1)
+						z = (((r - b) << 8) + divh) / div;//correct rounding  zz+(div>>1)
+					}
+					else if (g >= b) {/* g is maximum */
+						v = 255 - g;
+						div = g + 1;
+						divh = div >> 1;
+						e = (((g - r) << 8) + divh) / div;//correct rounding  ee+(div>>1)
+						f = 0;
+						z = (((g - b) << 8) + divh) / div;//correct rounding  zz+(div>>1)
+					}
+					else {/* b is maximum */
+						v = 255 - b;
+						div = b + 1;
+						divh = div >> 1;
+						e = (((b - r) << 8) + divh) / div;//correct rounding  ee+(div>>1)
+						f = (((b - g) << 8) + divh) / div;//correct rounding  ff+(div>>1)
+						z = 0;
+					}
+					// Applying the curves
+					e = d->ovalue[1][e];
+					f = d->ovalue[2][f];
+					z = d->ovalue[3][z];
+					v = d->ovalue[4][v];
+					// CMYK to RGB
+					r = 255 - ((((e*(256 - v)) + 128) >> 8) + v); //correct rounding rr+128;
+					if (r<0) r = 0;
+					g = 255 - ((((f*(256 - v)) + 128) >> 8) + v); //correct rounding gg+128;
+					if (g<0) g = 0;
+					b = 255 - ((((z*(256 - v)) + 128) >> 8) + v); //correct rounding bb+128;
+					if (b<0) b = 0;
+					dstpR[x] = static_cast<uint8_t>(r);
+					dstpG[x] = static_cast<uint8_t>(g);
+					dstpB[x] = static_cast<uint8_t>(b);
+				}
+				srcpR += srcStride;
+				srcpG += srcStride;
+				srcpB += srcStride;
+				dstpR += dstStride;
+				dstpG += dstStride;
+				dstpB += dstStride;
+			}
+			break;
+		case 7://HSV
+			int64_t l, m, n, cmin, cdelta, cdeltah, chi, ch;
+			for (int y = 0; y < height; y++) {
+				for (int x = 0; x < width; x++) {
+					r = static_cast<int>(srcpR[x]);
+					g = static_cast<int>(srcpG[x]);
+					b = static_cast<int>(srcpB[x]);
+					//RGB to HSV (l=H m=S n=V)
+					cmin = (std::min)(r, g);
+					cmin = (std::min)(b, cmin);
+					n = (std::max)(r, g);
+					n = (std::max)(b, n);
+					cdelta = n - cmin;
+					if (cdelta != 0)
+					{
+						m = (cdelta * 255) / n;
+						cdelta = (cdelta * 6);
+						cdeltah = cdelta >> 1;
+						if (r == n) { l = (((g - b) << 16) + cdeltah) / cdelta; }
+						else if (g == n) { l = 21845 + ((((b - r) << 16) + cdeltah) / cdelta); }
+						else { l = 43689 + ((((r - g) << 16) + cdeltah) / cdelta); }
+						if (l<0) { l = (l + 65577) >> 8; }
+						else { l = (l + 128) >> 8; }
+					}
+					else
+					{
+						m = 0;
+						l = 0;
+					}
+					// Applying the curves
+					l = d->ovalue[1][l];
+					m = d->ovalue[2][m];
+					n = d->ovalue[3][n];
+					// HSV to RGB
+					if (m == 0)
+					{
+						r = n;
+						g = n;
+						b = n;
+					}
+					else
+					{
+						chi = ((l * 6) & 0xFF00);
+						ch = (l * 6 - chi);;
+						switch (chi)
+						{
+						case 0:
+							r = n;
+							g = (n*(65263 - (m*(256 - ch))) + 65531) >> 16;
+							b = (n*(255 - m) + 94) >> 8;
+							break;
+						case 256:
+							r = (n*(65263 - m*ch) + 65528) >> 16;
+							g = n;
+							b = (n*(255 - m) + 89) >> 8;
+							break;
+						case 512:
+							r = (n*(255 - m) + 89) >> 8;
+							g = n;
+							b = (n*(65267 - (m*(256 - ch))) + 65529) >> 16;
+							break;
+						case 768:
+							r = (n*(255 - m) + 89) >> 8;
+							g = (n*(65267 - m*ch) + 65529) >> 16;
+							b = n;
+							break;
+						case 1024:
+							r = (n*(65263 - (m*(256 - ch))) + 65528) >> 16;
+							g = (n*(255 - m) + 89) >> 8;
+							b = n;
+							break;
+						default:
+							r = n;
+							g = (n*(255 - m) + 89) >> 8;
+							b = (n*(65309 - m*(ch + 1)) + 27) >> 16;
+							break;
+						}
+					}
+					dstpR[x] = static_cast<uint8_t>(r);
+					dstpG[x] = static_cast<uint8_t>(g);
+					dstpB[x] = static_cast<uint8_t>(b);
+				}
+				srcpR += srcStride;
+				srcpG += srcStride;
+				srcpB += srcStride;
+				dstpR += dstStride;
+				dstpG += dstStride;
+				dstpB += dstStride;
+			}
+			break;
+		case 8: //LAB
+			for (int y = 0; y < height; y++) {
+				for (int x = 0; x < width; x++) {
+					r = static_cast<int>(srcpR[x] << 16);
+					g = static_cast<int>(srcpG[x] << 8);
+					b = static_cast<int>(srcpB[x]);
+					int64_t old_pixel = r + g + b;
+					int64_t lab = rgblab[(old_pixel & 0xFFFFFF)];
+					rr = (lab & 0xFF0000) >> 16;
+					gg = (lab & 0x00FF00) >> 8;
+					bb = (lab & 0x0000FF);
+					// Applying the curves
+					x = d->ovalue[1][rr];
+					y = d->ovalue[2][gg];
+					z = d->ovalue[3][bb];
+					//Lab to XYZ				
+					int64_t new_pixel = labrgb[((x << 16) + (y << 8) + z)];
+					dstpR[x] = static_cast<uint8_t>((new_pixel & 0xFF0000) >> 16);
+					dstpG[x] = static_cast<uint8_t>((new_pixel & 0x00FF00) >> 8);
+					dstpB[x] = static_cast<uint8_t>((new_pixel & 0x0000FF));
+				}
+				srcpR += srcStride;
+				srcpG += srcStride;
+				srcpB += srcStride;
+				dstpR += dstStride;
+				dstpG += dstStride;
+				dstpB += dstStride;
+			}
+			break;
 		}
-
 		vsapi->freeFrame(src);
-
 		return dst;
-
 	}
-
 	return nullptr;
 }
 
@@ -641,15 +942,22 @@ static void VS_CC GradCurveFree(void *instanceData, VSCore *core, const VSAPI *v
 
 static void VS_CC GradCurveCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
 	GradCurveData d;
-
 	int err;
-	//vdub scriptconfig()
 	d.filename = static_cast<std::string>(vsapi->propGetData(in, "fname", 0, &err));//curve file path
-	d.filter = int64ToIntS(vsapi->propGetInt(in, "ftype", 0, &err));; //def:9 curve file type: ACV=2, amp smartcurve hsv=6, amp=9
-	d.proces = int64ToIntS(vsapi->propGetInt(in, "pmode", 0, &err));; //def:1 process mode: RGB + R/G/B
-
-	d.channel_mode = 0;//copied from vdub callback() rgb modes, this can probably stay hard coded unless i find a reason to process in another mode.
-
+	d.filter = int64ToIntS(vsapi->propGetInt(in, "ftype", 0, &err));; //curve file type eg: amp
+	if (d.filter == 0) {//filetype not provided, try to decipher from extension.
+		std::string mext = d.filename.substr(d.filename.size() - 4);
+		std::transform(mext.begin(), mext.end(), mext.begin(), ::tolower);
+		if (mext == ".amp") { d.filter = 1; }
+		else if (mext == ".acv") { d.filter = 2; }
+		else if (mext == ".csv") { d.filter = 3; }
+		else if (mext == ".crv") { d.filter = 4; }
+		else if (mext == ".map") { d.filter = 5; }
+		else if (mext == ".hsv") { d.filter = 6; }
+		else { vsapi->setError(out, "GradCurve: not a valid curve file, use: amp, acv, csv, crv, map, hsv"); }
+	}
+	d.proces = int64ToIntS(vsapi->propGetInt(in, "pmode", 0, &err));; //process mode eg: RGB + R/G/B
+	d.channel_mode = 0;//0=ALL, 1=R, 2=G, This should probably stay 0 since GradCurve only applies curves and does not manipulate them
 	d.node = vsapi->propGetNode(in, "clip", 0, nullptr);
 	d.vi = vsapi->getVideoInfo(d.node);
 
@@ -658,8 +966,6 @@ static void VS_CC GradCurveCreate(const VSMap *in, VSMap *out, void *userData, V
 		vsapi->freeNode(d.node);
 		return;
 	}
-
-	//vdub initproc()
 	d.Labprecalc = 0;
 	for (int i = 0; i<5; i++) {
 		d.drwmode[i] = 2;
@@ -669,44 +975,38 @@ static void VS_CC GradCurveCreate(const VSMap *in, VSMap *out, void *userData, V
 		d.drwpoint[i][1][0] = 255;
 		d.drwpoint[i][1][1] = 255;
 	}
-	d.proces = 0;
 	snprintf(d.gamma, 10, "%.3lf", 1.000);
 	for (int i = 0; i<256; i++) {
 		d.ovalue[0][i] = i;
-		d.rvalue[0][i] = (d.ovalue[0][i] << 16);
-		d.rvalue[2][i] = (d.ovalue[0][i] - i) << 16;
-		d.gvalue[0][i] = (d.ovalue[0][i] << 8);
-		d.gvalue[2][i] = (d.ovalue[0][i] - i) << 8;
+		d.rvalue[0][i] = (d.ovalue[0][i]);
+		d.rvalue[2][i] = (d.ovalue[0][i] - i);
+		d.gvalue[0][i] = (d.ovalue[0][i]);
+		d.gvalue[2][i] = (d.ovalue[0][i] - i);
 		d.bvalue[i] = (d.ovalue[0][i] - i);
 		d.ovalue[1][i] = i;
-		d.rvalue[1][i] = (d.ovalue[1][i] << 16);
+		d.rvalue[1][i] = (d.ovalue[1][i]);
 		d.ovalue[2][i] = i;
-		d.gvalue[1][i] = (d.ovalue[2][i] << 8);
+		d.gvalue[1][i] = (d.ovalue[2][i]);
 		d.ovalue[3][i] = i;
 		d.ovalue[4][i] = i;
 	}
-
-	//vdub startproc()
 	ImportCurve(&d);
 	if (d.Labprecalc == 0 && d.proces == 8) {	// build up the LUT for the Lab process	if it is not precalculated already
 		PreCalcLut();
 		d.Labprecalc = 1;
 	}
-
 	GradCurveData * data = new GradCurveData(d);
-
 	vsapi->createFilter(in, out, "GradCurve", GradCurveInit, GradCurveGetFrame, GradCurveFree, fmParallel, 0, data, core);
 }
 
 //////////////////////////////////////////
 // Init
-
 VS_EXTERNAL_API(void) VapourSynthPluginInit(VSConfigPlugin configFunc, VSRegisterFunction registerFunc, VSPlugin *plugin) {
 	configFunc("com.xekon.gradcurve", "grad", "Adjustment of contrast, brightness, gamma and a wide range of color manipulations through gradation curves is possible.", VAPOURSYNTH_API_VERSION, 1, plugin);
 	registerFunc("Curve",
 		"clip:clip;"
-		"fname:data:opt;" // curve file name
-		"ftype:int:opt;"  // def:7  curve file type: 2=ACV, 3=csv, 4=crv, 5=map, 6=amp Smartvurve hsv, 7=amp
-		"pmode:int:opt;", // def:1 process mode: 0=RGB only, 1=RGB + R/G/B, 2=RGB weighted, 3=RGB weighted + R/G/B, 4=no processing
+		"fname:data:opt;"//curve file name
+		"ftype:int:opt;" //curve file type: 1=amp (default), 2=ACV, 3=csv, 4=crv, 5=map, 6=amp Smartvurve hsv
+		"pmode:int:opt;",//process mode: 0=RGB (default), 1=RGB + R/G/B, 2=RGB weighted, 3=RGB weighted + R/G/B, 4=none, 5=YUV, 6=CMYK, 7=HSV, 8=LAB
 		GradCurveCreate, nullptr, plugin);
 }
