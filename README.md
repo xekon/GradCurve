@@ -3,7 +3,7 @@ Description
 
 GradCurve filter can be used to edit the gradation curves similar to the curves function of painting programs. It is a powerful tool that allows you to do some basic correction like brightness, contrast and gamma as well as a wide range of advanced color corrections and manipulations.
 
-Ported from VirtualDub plugin http://members.chello.at/nagiller/vdub/index.html forum: http://forum.doom9.org/showthread.php?t=133191
+Ported from VirtualDub plugin http://members.chello.at/nagiller/vdub/index.html
 
 
 Usage
@@ -15,7 +15,7 @@ Usage
 
 * fname: The curve file path.
 
-* ftype: The curve file type: 1=amp 2=acv, 3=csv, 4=crv, 5=map, 6=hsv Smartvurve
+* ftype: The curve file type: 1=amp, 2=acv, 3=csv, 4=crv, 5=map, 6=hsv Smartvurve
 
 * pmode: process mode: 0=RGB, 1=RGB + R/G/B, 2=RGB weighted, 3=RGB weighted + R/G/B, 4=none, 5=YUV, 6=CMYK, 7=HSV, 8=LAB
 
@@ -44,8 +44,7 @@ linux example:
 	src = core.std.StackHorizontal([prev,src])
 	src.set_output()
 	
-Windows install, download the [DLL](GradCurve/x64/Release/GradCurve.dll), and place it in your VapourSynth\plugins64 directory.
-=====
+**Windows install, download the [DLL](GradCurve/x64/Release/GradCurve.dll), and place it in your VapourSynth\plugins64 directory.**
 	
 windows example:
 =====
